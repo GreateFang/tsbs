@@ -3,6 +3,7 @@ module github.com/timescale/tsbs
 go 1.14
 
 require (
+	gitee.com/opengauss/openGauss-connector-go-pq v1.0.4
 	github.com/HdrHistogram/hdrhistogram-go v1.0.0
 	github.com/SiriDB/go-siridb-connector v0.0.0-20190110105621-86b34c44c921
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
@@ -16,6 +17,7 @@ require (
 	github.com/golang/snappy v0.0.1
 	github.com/google/flatbuffers v1.11.0
 	github.com/google/go-cmp v0.5.2
+	github.com/jackc/pgtype v1.4.2
 	github.com/jackc/pgx/v4 v4.8.0
 	github.com/jmoiron/sqlx v1.2.1-0.20190826204134-d7d95172beb5
 	github.com/kshvakov/clickhouse v1.3.11
@@ -30,7 +32,7 @@ require (
 	github.com/transceptor-technology/go-qpack v0.0.0-20190116123619-49a14b216a45
 	github.com/valyala/fasthttp v1.15.1
 	go.uber.org/atomic v1.6.0
-	golang.org/x/net v0.0.0-20200904194848-62affa334b73
+	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	gopkg.in/yaml.v2 v2.3.0
 )

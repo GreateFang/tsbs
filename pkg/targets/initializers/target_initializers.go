@@ -15,6 +15,7 @@ import (
 	"github.com/timescale/tsbs/pkg/targets/siridb"
 	"github.com/timescale/tsbs/pkg/targets/timescaledb"
 	"github.com/timescale/tsbs/pkg/targets/timestream"
+	"github.com/timescale/tsbs/pkg/targets/vastbase"
 	"github.com/timescale/tsbs/pkg/targets/victoriametrics"
 	"strings"
 )
@@ -45,6 +46,9 @@ func GetTarget(format string) targets.ImplementedTarget {
 		return timestream.NewTarget()
 	case constants.FormatQuestDB:
 		return questdb.NewTarget()
+	case constants.FormatVastbase:
+		return vastbase.NewTarget()
+
 	}
 
 	supportedFormatsStr := strings.Join(constants.SupportedFormats(), ",")

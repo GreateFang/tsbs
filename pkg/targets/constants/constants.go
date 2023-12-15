@@ -8,6 +8,7 @@ const (
 	FormatMongo           = "mongo"
 	FormatSiriDB          = "siridb"
 	FormatTimescaleDB     = "timescaledb"
+	FormatVastbase        = "vastbase"
 	FormatAkumuli         = "akumuli"
 	FormatCrateDB         = "cratedb"
 	FormatPrometheus      = "prometheus"
@@ -24,6 +25,7 @@ func SupportedFormats() []string {
 		FormatMongo,
 		FormatSiriDB,
 		FormatTimescaleDB,
+		FormatVastbase,
 		FormatAkumuli,
 		FormatCrateDB,
 		FormatPrometheus,
