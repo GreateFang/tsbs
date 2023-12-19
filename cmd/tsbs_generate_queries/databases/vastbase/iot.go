@@ -61,12 +61,10 @@ func (i *IoT) LastLocByTruck(qi query.Query, nTrucks int) {
 // LastLocPerTruck finds all the truck locations along with truck and driver names.
 func (i *IoT) LastLocPerTruck(qi query.Query) {
 
-	vastbaseql := fmt.Sprintf(`SELECT "latitude", "longitude" 
+	vastbaseql := fmt.Sprintf(`SELECT  DISTINCT ON (name, driver) time, name, driver, "latitude", "longitude" 
 		FROM "readings" 
 		WHERE "fleet"='%s' 
-		GROUP BY "name","driver" 
-		ORDER BY "time" 
-		LIMIT 1`,
+		ORDER BY "name","driver", "time"`,
 		i.GetRandomFleet())
 
 	humanLabel := "vastbase last location per truck"
@@ -77,12 +75,10 @@ func (i *IoT) LastLocPerTruck(qi query.Query) {
 
 // TrucksWithLowFuel finds all trucks with low fuel (less than 10%).
 func (i *IoT) TrucksWithLowFuel(qi query.Query) {
-	vastbaseql := fmt.Sprintf(`SELECT "name", "driver", "fuel_state" 
-		FROM "diagnostics" 
-		WHERE "fuel_state" <= 0.1 AND "fleet" = '%s' 
-		GROUP BY "name" 
-		ORDER BY "time" DESC 
-		LIMIT 1`,
+	vastbaseql := fmt.Sprintf(`SELECT DISTINCT ON (name, driver) time, name, driver, fuel_state
+					FROM diagnostics
+					WHERE fuel_state <= 0.1 AND fleet = '%s' AND name IS NOT NULL
+					ORDER BY name, driver, time DESC`,
 		i.GetRandomFleet())
 
 	humanLabel := "vastbase trucks with low fuel"
@@ -93,14 +89,12 @@ func (i *IoT) TrucksWithLowFuel(qi query.Query) {
 
 // TrucksWithHighLoad finds all trucks that have load over 90%.
 func (i *IoT) TrucksWithHighLoad(qi query.Query) {
-	vastbaseql := fmt.Sprintf(`SELECT "name", "driver", "current_load", "load_capacity" 
-		FROM (SELECT  "current_load", "load_capacity" 
+	vastbaseql := fmt.Sprintf(`SELECT "time","name", "driver", "current_load", "load_capacity" 
+		FROM (
+		 SELECT distinct on ("name","driver") "time", "name","driver","current_load", "load_capacity" 
 		 FROM "diagnostics" WHERE fleet = '%s' 
-		 GROUP BY "name","driver" 
-		 ORDER BY "time" DESC 
-		 LIMIT 1) 
+		 ORDER BY "name","driver","time" DESC ) 
 		WHERE "current_load" >= 0.9 * "load_capacity" 
-		GROUP BY "name" 
 		ORDER BY "time" DESC`,
 		i.GetRandomFleet())
 
@@ -113,14 +107,15 @@ func (i *IoT) TrucksWithHighLoad(qi query.Query) {
 // StationaryTrucks finds all trucks that have low average velocity in a time window.
 func (i *IoT) StationaryTrucks(qi query.Query) {
 	interval := i.Interval.MustRandWindow(iot.StationaryDuration)
-	vastbaseql := fmt.Sprintf(`SELECT "name", "driver" 
-		FROM(SELECT mean("velocity") as mean_velocity 
-		 FROM "readings" 
-		 WHERE time > '%s' AND time <= '%s' 
-		 GROUP BY time(10m),"name","driver","fleet"  
-		 LIMIT 1) 
-		WHERE "fleet" = '%s' AND "mean_velocity" < 1 
-		GROUP BY "name"`,
+	vastbaseql := fmt.Sprintf(`SELECT name, driver
+						FROM (
+						    SELECT name, driver, avg(velocity) AS mean_velocity
+						    FROM readings
+						    WHERE time > '%s' AND time <= '%s' AND fleet = '%s'
+						    GROUP BY name, driver, time_bucket('10 minutes', time) 
+						    LIMIT 1
+						) subquery
+						WHERE mean_velocity < 1`,
 		interval.Start().Format(time.RFC3339),
 		interval.End().Format(time.RFC3339),
 		i.GetRandomFleet())
@@ -134,19 +129,19 @@ func (i *IoT) StationaryTrucks(qi query.Query) {
 // TrucksWithLongDrivingSessions finds all trucks that have not stopped at least 20 mins in the last 4 hours.
 func (i *IoT) TrucksWithLongDrivingSessions(qi query.Query) {
 	interval := i.Interval.MustRandWindow(iot.LongDrivingSessionDuration)
-	vastbaseql := fmt.Sprintf(`SELECT "name","driver" 
-		FROM(SELECT count(*) AS ten_min 
-		 FROM(SELECT mean("velocity") AS mean_velocity 
-		  FROM readings 
-		  WHERE "fleet" = '%s' AND time > '%s' AND time <= '%s' 
-		  GROUP BY time(10m),"name","driver") 
-		 WHERE "mean_velocity" > 1 
-		 GROUP BY "name","driver") 
-		WHERE ten_min_mean_velocity > %d`,
+	vastbaseql := fmt.Sprintf(`SELECT name, driver
+FROM (
+    SELECT name, driver, avg(velocity) OVER (PARTITION BY name, driver, time_bucket('10 minutes', time)) AS mean_velocity, 
+           count(*) OVER (PARTITION BY name, driver, time_bucket('10 minutes', time)) AS record_count
+    FROM readings
+    WHERE fleet = '%s' AND time > '%s' AND time <= '%s'
+) subquery
+WHERE mean_velocity > 1
+GROUP BY name, driver
+HAVING count(*) > %d`,
 		i.GetRandomFleet(),
 		interval.Start().Format(time.RFC3339),
 		interval.End().Format(time.RFC3339),
-		// Calculate number of 10 min intervals that is the max driving duration for the session if we rest 5 mins per hour.
 		tenMinutePeriods(5, iot.LongDrivingSessionDuration))
 
 	humanLabel := "vastbase trucks with longer driving sessions"
@@ -158,15 +153,16 @@ func (i *IoT) TrucksWithLongDrivingSessions(qi query.Query) {
 // TrucksWithLongDailySessions finds all trucks that have driven more than 10 hours in the last 24 hours.
 func (i *IoT) TrucksWithLongDailySessions(qi query.Query) {
 	interval := i.Interval.MustRandWindow(iot.DailyDrivingDuration)
-	vastbaseql := fmt.Sprintf(`SELECT "name","driver" 
-		FROM(SELECT count(*) AS ten_min 
-		 FROM(SELECT mean("velocity") AS mean_velocity 
-		  FROM readings 
-		  WHERE "fleet" = '%s' AND time > '%s' AND time <= '%s' 
-		  GROUP BY time(10m),"name","driver") 
-		 WHERE "mean_velocity" > 1 
-		 GROUP BY "name","driver") 
-		WHERE ten_min_mean_velocity > %d`,
+	vastbaseql := fmt.Sprintf(`SELECT name, driver
+FROM (
+    SELECT name, driver, avg(velocity) OVER (PARTITION BY name, driver, time_bucket('10 minutes', time)) AS mean_velocity, 
+           count(*) OVER (PARTITION BY name, driver) AS record_count
+    FROM readings
+    WHERE fleet = '%s' AND time > '%s' AND time <= '%s'
+) subquery
+WHERE mean_velocity > 1
+GROUP BY name, driver
+HAVING count(*) > %d`,
 		i.GetRandomFleet(),
 		interval.Start().Format(time.RFC3339),
 		interval.End().Format(time.RFC3339),
@@ -181,10 +177,9 @@ func (i *IoT) TrucksWithLongDailySessions(qi query.Query) {
 
 // AvgVsProjectedFuelConsumption calculates average and projected fuel consumption per fleet.
 func (i *IoT) AvgVsProjectedFuelConsumption(qi query.Query) {
-	vastbaseql := `SELECT mean("fuel_consumption") AS "mean_fuel_consumption", mean("nominal_fuel_consumption") AS "nominal_fuel_consumption" 
-		FROM "readings" 
-		WHERE "velocity" > 1 
-		GROUP BY "fleet"`
+	vastbaseql := `SELECT avg(fuel_consumption) AS avg_fuel_consumption, avg(nominal_fuel_consumption) AS nominal_fuel_consumption
+					FROM readings WHERE velocity > 1
+					GROUP BY fleet`
 
 	humanLabel := "vastbase average vs projected fuel consumption per fleet"
 	humanDesc := humanLabel
@@ -197,14 +192,11 @@ func (i *IoT) AvgDailyDrivingDuration(qi query.Query) {
 	start := i.Interval.Start().Format(time.RFC3339)
 	end := i.Interval.End().Format(time.RFC3339)
 	vastbaseql := fmt.Sprintf(`SELECT count("mv")/6 as "hours driven" 
-		FROM (SELECT mean("velocity") as "mv" 
+		FROM (SELECT time_bucket('10 minutes', time) as ts, "fleet", "name", "driver", avg("velocity") as "mv" 
 		 FROM "readings" 
 		 WHERE time > '%s' AND time < '%s' 
-		 GROUP BY time(10m),"fleet", "name", "driver") 
-		WHERE time > '%s' AND time < '%s' 
-		GROUP BY time(1d),"fleet", "name", "driver"`,
-		start,
-		end,
+		 GROUP BY time_bucket('10 minutes', time), "fleet", "name", "driver") 
+		GROUP BY time_bucket('1d', ts), "fleet", "name", "driver"`,
 		start,
 		end,
 	)
@@ -252,10 +244,10 @@ func (i *IoT) AvgDailyDrivingSession(qi query.Query) {
 
 // AvgLoad finds the average load per truck model per fleet.
 func (i *IoT) AvgLoad(qi query.Query) {
-	vastbaseql := `SELECT mean("ml") AS mean_load_percentage 
-		FROM (SELECT "current_load"/"load_capacity" AS "ml" 
+	vastbaseql := `SELECT avg("ml") AS mean_load_percentage 
+		FROM (SELECT "fleet", "model", "current_load"/"load_capacity" AS "ml" 
 		 FROM "diagnostics" 
-		 GROUP BY "name", "fleet", "model") 
+		 GROUP BY "name", "fleet", "model", "current_load", "load_capacity") 
 		GROUP BY "fleet", "model"`
 
 	humanLabel := "vastbase average load per truck model per fleet"
@@ -269,12 +261,12 @@ func (i *IoT) DailyTruckActivity(qi query.Query) {
 	start := i.Interval.Start().Format(time.RFC3339)
 	end := i.Interval.End().Format(time.RFC3339)
 	vastbaseql := fmt.Sprintf(`SELECT count("ms")/144 
-		FROM (SELECT mean("status") AS ms 
+		FROM (SELECT avg("status") AS ms , time_bucket('10m', time) as time, "model", "fleet"
 		 FROM "diagnostics" 
 		 WHERE time >= '%s' AND time < '%s' 
-		 GROUP BY time(10m), "model", "fleet") 
+		 GROUP BY time_bucket('10m', time), "model", "fleet") 
 		WHERE time >= '%s' AND time < '%s' AND "ms"<1 
-		GROUP BY time(1d), "model", "fleet"`,
+		GROUP BY time_bucket('1d', time), "model", "fleet"`,
 		start,
 		end,
 		start,

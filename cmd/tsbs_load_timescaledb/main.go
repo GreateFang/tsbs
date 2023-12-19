@@ -82,7 +82,7 @@ func main() {
 
 	// If specified, generate a performance profile
 	if len(opts.ProfileFile) > 0 {
-		go profileCPUAndMem(opts.ProfileFile)
+		go profileCPUAndMem(opts.ProfileFile, loaderConf.DBName)
 	}
 
 	var replicationStatsWaitGroup sync.WaitGroup

@@ -10,7 +10,7 @@ import (
 	"github.com/shirou/gopsutil/process"
 )
 
-func profileCPUAndMem(file string) {
+func profileCPUAndMem(file string, DBname string) {
 	f, err := os.Create(file)
 	if err != nil {
 		log.Fatal(err)
@@ -26,7 +26,7 @@ func profileCPUAndMem(file string) {
 			}
 			for _, p := range procs {
 				cmd, _ := p.Cmdline()
-				if strings.Contains(cmd, "postgres") && strings.Contains(cmd, "INSERT") {
+				if strings.Contains(cmd, DBname) && (strings.Contains(cmd, "INSERT") || strings.Contains(cmd, "insert")) {
 					proc = p
 					break
 				}
@@ -43,7 +43,7 @@ func profileCPUAndMem(file string) {
 				continue
 			}
 
-			fmt.Fprintf(f, "%f,%d,%d,%d\n", cpu, mem.RSS, mem.VMS, mem.Swap)
+			fmt.Fprintf(f, "CPU Percent: %f, MemRSS: %d, MemVMS: %d, MemSwap：%d\n", cpu, mem.RSS, mem.VMS, mem.Swap)
 		}
 	}
 }

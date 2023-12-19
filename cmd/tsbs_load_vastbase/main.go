@@ -84,7 +84,7 @@ func main() {
 	// If specified, generate a performance profile
 	if len(opts.ProfileFile) > 0 {
 		// 在后台周期性地监测特定进程的CPU和内存使用情况，并将数据写入指定的文件
-		go profileCPUAndMem(opts.ProfileFile)
+		go profileCPUAndMem(opts.ProfileFile, loaderConf.DBName)
 	}
 
 	// 检查是否指定了复制统计文件（opts.ReplicationStatsFile不为空）。如果指定了复制统计文件，
@@ -108,7 +108,7 @@ func main() {
 
 }
 
-func profileCPUAndMem(file string) {
+func profileCPUAndMem(file string, DBName string) {
 	// 创建一个文件，并在出现错误时记录日志并终止程序
 	f, err := os.Create(file)
 	if err != nil {
@@ -129,7 +129,8 @@ func profileCPUAndMem(file string) {
 			}
 			for _, p := range procs {
 				cmd, _ := p.Cmdline()
-				if strings.Contains(cmd, "postgres") && strings.Contains(cmd, "INSERT") {
+				if strings.Contains(cmd, DBName) && (strings.Contains(cmd, "INSERT") || strings.Contains(cmd, "insert")) {
+					fmt.Println(cmd)
 					proc = p
 					break
 				}
@@ -151,7 +152,7 @@ func profileCPUAndMem(file string) {
 			// 如果成功获取了CPU使用率和内存信息，代码将这些数据格式化为字符串，
 			// 并使用fmt.Fprintf()将其写入文件中。数据格式为CPU使用率,实际内存使用量,
 			// 虚拟内存使用量,交换内存使用量。
-			fmt.Fprintf(f, "%f,%d,%d,%d\n", cpu, mem.RSS, mem.VMS, mem.Swap)
+			fmt.Fprintf(f, "CPU Percent: %f, MemRSS: %d, MemVMS: %d, MemSwap：%d\n", cpu, mem.RSS, mem.VMS, mem.Swap)
 		}
 	}
 }
